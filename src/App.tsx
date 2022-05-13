@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 
 import './App.css';
-import { Data } from './types';
+import { CalculatedData, Data } from './types';
 import * as Styled from './App.styles';
 
 // temp until we have more numbers
@@ -37,6 +37,13 @@ const stations = [
   'Harrow & Wealdstone Underground Station',
 ];
 
+type DataWithCheckedFields = Data & CalculatedData & Pick<Required<Data>, 'stationName' | 'destinationName' | 'vehicleId' | 'timeToStation'>;
+
+const containsRequiredFields = (data: Data): data is DataWithCheckedFields => (
+  data.stationName !== undefined && data.destinationName !== undefined
+  && data.vehicleId !== undefined && data.timeToStation !== undefined
+);
+
 function App() {
   const [data, setData] = useState<Data[] | undefined>(undefined);
 
@@ -63,10 +70,9 @@ function App() {
       return [];
     }
 
-    const vehicles: Record<string, any> = {};
+    const vehicles: Record<string, DataWithCheckedFields> = {};
     data.forEach((entry) => {
-      if (!entry.stationName || !entry.destinationName
-        || !entry.vehicleId || !entry.timeToStation) {
+      if (!containsRequiredFields(entry)) {
         return;
       }
 
@@ -76,22 +82,43 @@ function App() {
       }
 
       // only vehicles heading north
-      if (stations.indexOf(entry.destinationName) === 0
-        || stations.indexOf(entry.destinationName) < stations.indexOf(entry.stationName)) {
-        return;
+      // if (stations.indexOf(entry.destinationName) === 0
+      //   || stations.indexOf(entry.destinationName) < stations.indexOf(entry.stationName)) {
+      //   return;
+      // }
+      const destinationIndex = stations.indexOf(entry.destinationName);
+      const stationIndex = stations.indexOf(entry.stationName);
+      let direction: 'left' | 'right' | undefined;
+      if (destinationIndex < stationIndex) {
+        direction = 'left';
+      } else if (stationIndex < destinationIndex) {
+        direction = 'right';
+      } else if (vehicles[entry.vehicleId] && vehicles[entry.vehicleId].direction) {
+        direction = vehicles[entry.vehicleId].direction;
       }
 
       if (!(entry.vehicleId in vehicles)) {
-        vehicles[entry.vehicleId] = entry;
+        vehicles[entry.vehicleId] = {
+          ...entry,
+          direction,
+        };
         return;
       }
 
-      if (entry.timeToStation < vehicles[entry.vehicleId].timeToStation) {
-        vehicles[entry.vehicleId] = entry;
+      if (vehicles[entry.vehicleId].timeToStation === undefined) {
+        return;
+      }
+
+      const { timeToStation } = vehicles[entry.vehicleId];
+      if (timeToStation && entry.timeToStation < timeToStation) {
+        vehicles[entry.vehicleId] = {
+          ...entry,
+          direction,
+        };
       }
     });
 
-    return Object.values(vehicles).sort((a, b) => {
+    return Object.values(vehicles).filter((entry) => entry.direction).sort((a, b) => {
       const aStationIndex = stations.indexOf(a.stationName);
       const bStationIndex = stations.indexOf(b.stationName);
 
@@ -108,9 +135,9 @@ function App() {
   return (
     <div className="App">
       <p>
-        data streaming platform data visualization test / demo (gab, 12 May 22:00)
+        data streaming platform data visualization test / demo (gab, 13 May 09:00)
         <br />
-        - only Bakerloo line north-bound (right on the &quot;graph&quot;) vehicles
+        - only Bakerloo line (left = south, right = north) vehicles
         <br />
         - auto-refetches data every 10 seconds
         <br />
@@ -120,13 +147,34 @@ function App() {
         {stations.map((station) => (
           <Styled.StationWrapper key={station}>
             {sortedVehicles.filter((entry) => entry.stationName === station).map((entry) => (
-              <Styled.Vehicle key={entry.id} timeToStation={entry.timeToStation}>
-                {entry.vehicleId}
+              <Styled.Vehicle
+                key={entry.id}
+                title={(
+                  <>
+                    {entry.vehicleId}
+                    <br />
+                    {entry.stationName}
+                    <br />
+                    heading
+                    {' '}
+                    {entry.direction}
+                    <br />
+                    {entry.timeToStation}
+                    s away from station
+                    <br />
+                    {entry.currentLocation}
+                  </>
+              )}
+                direction={entry.direction as 'left' | 'right'}
+                timeToStation={entry.timeToStation}
+              >
+                <div>{entry.vehicleId}</div>
               </Styled.Vehicle>
             ))}
             <Styled.StationName>{station.replace(' Underground Station', '')}</Styled.StationName>
           </Styled.StationWrapper>
         ))}
+        <Styled.StationWrapper />
       </Styled.TubeLine>
 
       <br />

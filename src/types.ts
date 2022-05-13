@@ -21,3 +21,7 @@ export interface Data {
   modeName?: string;
   timing?: unknown;
 }
+
+export interface CalculatedData {
+  direction?: 'left' | 'right';
+}
